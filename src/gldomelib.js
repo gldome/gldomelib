@@ -1,7 +1,7 @@
 function GLDomeLib() {
 	var stats, container, camSky, camUser;
 	var camFisheye, sceneFisheye;
-	var renderer;
+	var renderer, control1, control2;
 
 	var width = window.innerWidth;
 	var height = window.innerHeight;
@@ -43,9 +43,11 @@ function GLDomeLib() {
 	}
 
 	function initCameras() {
-		camUser = new THREE.PerspectiveCamera(60, width/height, 1, 3000);
+		camUser = new THREE.PerspectiveCamera(80, width/height, 1, 3000);
 		camUser.lookAt(new THREE.Vector3(10, 0, 0));
-		controls = new THREE.DeviceOrientationControls(camUser);
+		control1 = new THREE.DeviceOrientationControls(camUser);
+		control2 = new THREE.MouseControls(camUser);
+
 		me.scene.add(camUser);
 
 		camSky = new THREE.CubeCamera(1, 3000, debug ? 512 : 2048);
@@ -105,7 +107,8 @@ function GLDomeLib() {
 
 	function drawFrame() {
 		stats.begin();
-		controls.update();
+		control1.update();
+		control2.update();
 		dispatch('frame');
 		render();
 		stats.end();

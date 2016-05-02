@@ -7,29 +7,27 @@
 
 THREE.DeviceOrientationControls = function( object ) {
 
-	var scope = this;
+	var me = this;
 
-	this.object = object;
-	this.object.rotation.reorder( "YXZ" );
+	me.object = object;
+	me.object.rotation.reorder( "YXZ" );
 
-	this.enabled = true;
+	me.enabled = true;
 
-	this.deviceOrientation = {};
-	this.screenOrientation = 0;
+	me.deviceOrientation = {};
+	me.screenOrientation = 0;
 
-	this.alpha = 0;
-	this.alphaOffsetAngle = 0;
-
+	me.alpha = 0;
+	me.alphaOffsetAngle = 0;
 
 	var onDeviceOrientationChangeEvent = function( event ) {
-
-		scope.deviceOrientation = event;
+		me.deviceOrientation = event;
 
 	};
 
 	var onScreenOrientationChangeEvent = function() {
 
-		scope.screenOrientation = window.orientation || 0;
+		me.screenOrientation = window.orientation || 0;
 
 	};
 
@@ -59,53 +57,57 @@ THREE.DeviceOrientationControls = function( object ) {
 
 	}();
 
-	this.connect = function() {
+	me.connect = function() {
 
 		onScreenOrientationChangeEvent(); // run once on load
 
 		window.addEventListener( 'orientationchange', onScreenOrientationChangeEvent, false );
 		window.addEventListener( 'deviceorientation', onDeviceOrientationChangeEvent, false );
 
-		scope.enabled = true;
+		me.enabled = true;
 
 	};
 
-	this.disconnect = function() {
+	me.disconnect = function() {
 
 		window.removeEventListener( 'orientationchange', onScreenOrientationChangeEvent, false );
 		window.removeEventListener( 'deviceorientation', onDeviceOrientationChangeEvent, false );
 
-		scope.enabled = false;
+		me.enabled = false;
 
 	};
 
-	this.update = function() {
+	me.update = function() {
 
-		if ( scope.enabled === false ) return;
+		if ( me.enabled === false ) return;
+		if (!me.deviceOrientation) return;
+		if (!me.deviceOrientation.alpha) return;
 
-		var alpha = scope.deviceOrientation.alpha ? THREE.Math.degToRad( scope.deviceOrientation.alpha ) + this.alphaOffsetAngle : 0; // Z
-		var beta = scope.deviceOrientation.beta ? THREE.Math.degToRad( scope.deviceOrientation.beta ) : 0; // X'
-		var gamma = scope.deviceOrientation.gamma ? THREE.Math.degToRad( scope.deviceOrientation.gamma ) : 0; // Y''
-		var orient = scope.screenOrientation ? THREE.Math.degToRad( scope.screenOrientation ) : 0; // O
+		var alpha = me.deviceOrientation.alpha ? THREE.Math.degToRad( me.deviceOrientation.alpha ) + me.alphaOffsetAngle : 0; // Z
+		var beta = me.deviceOrientation.beta ? THREE.Math.degToRad( me.deviceOrientation.beta ) : 0; // X'
+		var gamma = me.deviceOrientation.gamma ? THREE.Math.degToRad( me.deviceOrientation.gamma ) : 0; // Y''
+		var orient = me.screenOrientation ? THREE.Math.degToRad( me.screenOrientation ) : 0; // O
 
-		setObjectQuaternion( scope.object.quaternion, alpha, beta, gamma, orient );
-		this.alpha = alpha;
+		if (beta < Math.PI/2) return;
 
-	};
-
-	this.updateAlphaOffsetAngle = function( angle ) {
-
-		this.alphaOffsetAngle = angle;
-		this.update();
+		setObjectQuaternion( me.object.quaternion, alpha, beta, gamma, orient );
+		me.alpha = alpha;
 
 	};
 
-	this.dispose = function() {
+	me.updateAlphaOffsetAngle = function( angle ) {
 
-		this.disconnect();
+		me.alphaOffsetAngle = angle;
+		me.update();
 
 	};
 
-	this.connect();
+	me.dispose = function() {
+
+		me.disconnect();
+
+	};
+
+	me.connect();
 
 };
