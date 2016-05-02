@@ -121,7 +121,6 @@ function GLDomeLib() {
 		width = window.innerWidth;
 		height = window.innerHeight;
 		size = Math.min(width, height);
-		mode = (size < 2000) ? 'user' : 'fisheye';
 
 		camUser.aspect = width/height;
 		camUser.updateProjectionMatrix();
