@@ -36,7 +36,7 @@ THREE.MouseControls = function (object) {
 		var movementY = position.y - lastPosition.y;
 		lastPosition = position;
 
-		var moveSpeed = 2/Math.min(window.innerWidth, window.innerHeight);
+		var moveSpeed = 0.02*object.fov/Math.min(window.innerWidth, window.innerHeight);
 
 		rotation.y += movementX * moveSpeed;
 		rotation.x += movementY * moveSpeed;
@@ -49,7 +49,7 @@ THREE.MouseControls = function (object) {
 		lastZoom = event.scale;
 		object.fov /= zoomChange;
 		if (object.fov <   1) object.fov =   1;
-		if (object.fov > 150) object.fov = 150;
+		if (object.fov > 170) object.fov = 170;
 		object.updateProjectionMatrix();
 	}
 
