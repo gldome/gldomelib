@@ -1,13 +1,11 @@
 function GLDomeLib() {
 	var stats, container, camSky, camUser;
-	var camFisheye, sceneFisheye;
+	var camFisheye, sceneFisheye, fisheyeReflector;
 	var renderer, control1, control2;
 
 	var width = window.innerWidth;
 	var height = window.innerHeight;
 	var size = Math.min(width, height);
-
-	var mode = (size < 2000) ? 'user' : 'fisheye';
 
 	var me = {
 		maxDuration: false,
@@ -15,6 +13,7 @@ function GLDomeLib() {
 	}
 
 	window.addEventListener('load', start);
+	window.addEventListener('resize', onResize);
 
 	function start() {
 		stats = new Stats();
@@ -64,17 +63,17 @@ function GLDomeLib() {
 		//var material = new THREE.MeshNormalMaterial({wireframe:true});
 
 		var points = [];
-		var n = 50;
-		var s = size/2;
+		var n = 80;
 		for (var i = 0; i <= n; i++) {
 			var y = (i-0.5)/(n-2);
 			if (y < 0) y = 0;
 			var x = -Math.log(Math.cos(y))/Math.tan(1);
-			points.push(new THREE.Vector3(y*s+1e-10, x*s, 0))
+			points.push(new THREE.Vector3(y/2+1e-10, x/2, 0))
 		}
 
-		var fisheyeReflector = new THREE.LatheGeometry(points, Math.round(n*Math.PI));
+		fisheyeReflector = new THREE.LatheGeometry(points, Math.round(n*Math.PI));
 		fisheyeReflector = new THREE.Mesh(fisheyeReflector, material);
+		fisheyeReflector.scale.set(size, size, size);
 		fisheyeReflector.rotation.x = -Math.PI/2;
 		fisheyeReflector.updateMatrix();
 		
@@ -92,14 +91,13 @@ function GLDomeLib() {
 	}
 	
 	function render() {
-		switch (mode) {
-			case 'user':
-				renderer.render(me.scene, camUser);
-			break;
-			case 'fisheye':
-				camSky.updateCubeMap(renderer, me.scene);
-				renderer.render(sceneFisheye, camFisheye);
-			break;
+		if (size < 1500) {
+			// user perspective
+			renderer.render(me.scene, camUser);
+		} else {
+			// fisheye projection
+			camSky.updateCubeMap(renderer, me.scene);
+			renderer.render(sceneFisheye, camFisheye);
 		}
 		
 	}
@@ -117,6 +115,29 @@ function GLDomeLib() {
 		} else {
 			requestAnimationFrame(drawFrame);
 		}
+	}
+
+	function onResize() {
+		width = window.innerWidth;
+		height = window.innerHeight;
+		size = Math.min(width, height);
+		mode = (size < 2000) ? 'user' : 'fisheye';
+
+		camUser.aspect = width/height;
+		camUser.updateProjectionMatrix();
+		camUser.updateMatrix();
+
+		camFisheye.left = -width/2;
+		camFisheye.right = width/2;
+		camFisheye.top = height/2;
+		camFisheye.bottom = -height/2;
+		camFisheye.updateProjectionMatrix();
+		camFisheye.updateMatrix();
+
+		renderer.setSize(width, height);
+
+		fisheyeReflector.scale.set(size, size, size);
+		fisheyeReflector.updateMatrix();
 	}
 
 	var eventMap = {};
