@@ -8,7 +8,6 @@ function GLDomeLib() {
 	var size = Math.min(width, height);
 
 	var mode = (size < 2000) ? 'user' : 'fisheye';
-	var debug = true;
 
 	var me = {
 		maxDuration: false,
@@ -50,7 +49,7 @@ function GLDomeLib() {
 
 		me.scene.add(camUser);
 
-		camSky = new THREE.CubeCamera(1, 3000, debug ? 512 : 2048);
+		camSky = new THREE.CubeCamera(1, 3000, 2048);
 		camSky.renderTarget.texture.minFilter = THREE.LinearMipMapLinearFilter;
 		camSky.lookAt(new THREE.Vector3(0, 10, 0));
 		me.scene.add(camSky);
