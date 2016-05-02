@@ -1,366 +1,3 @@
-/**
- * @author richt / http://richt.me
- * @author WestLangley / http://github.com/WestLangley
- *
- * W3C Device Orientation control (http://w3c.github.io/deviceorientation/spec-source-orientation.html)
- */
-
-THREE.DeviceOrientationControls = function( object ) {
-
-	var me = this;
-
-	me.object = object;
-	me.object.rotation.reorder( "YXZ" );
-
-	me.enabled = true;
-
-	me.deviceOrientation = {};
-	me.screenOrientation = 0;
-
-	me.alpha = 0;
-	me.alphaOffsetAngle = 0;
-
-	var onDeviceOrientationChangeEvent = function( event ) {
-		me.deviceOrientation = event;
-
-	};
-
-	var onScreenOrientationChangeEvent = function() {
-
-		me.screenOrientation = window.orientation || 0;
-
-	};
-
-	// The angles alpha, beta and gamma form a set of intrinsic Tait-Bryan angles of type Z-X'-Y''
-
-	var setObjectQuaternion = function() {
-
-		var zee = new THREE.Vector3( 0, 0, 1 );
-
-		var euler = new THREE.Euler();
-
-		var q0 = new THREE.Quaternion();
-
-		var q1 = new THREE.Quaternion( - Math.sqrt( 0.5 ), 0, 0, Math.sqrt( 0.5 ) ); // - PI/2 around the x-axis
-
-		return function( quaternion, alpha, beta, gamma, orient ) {
-
-			euler.set( beta, alpha, - gamma, 'YXZ' ); // 'ZXY' for the device, but 'YXZ' for us
-
-			quaternion.setFromEuler( euler ); // orient the device
-
-			quaternion.multiply( q1 ); // camera looks out the back of the device, not the top
-
-			quaternion.multiply( q0.setFromAxisAngle( zee, - orient ) ); // adjust for screen orientation
-
-		}
-
-	}();
-
-	me.connect = function() {
-
-		onScreenOrientationChangeEvent(); // run once on load
-
-		window.addEventListener( 'orientationchange', onScreenOrientationChangeEvent, false );
-		window.addEventListener( 'deviceorientation', onDeviceOrientationChangeEvent, false );
-
-		me.enabled = true;
-
-	};
-
-	me.disconnect = function() {
-
-		window.removeEventListener( 'orientationchange', onScreenOrientationChangeEvent, false );
-		window.removeEventListener( 'deviceorientation', onDeviceOrientationChangeEvent, false );
-
-		me.enabled = false;
-
-	};
-
-	me.update = function() {
-
-		if ( me.enabled === false ) return;
-		if (!me.deviceOrientation) return;
-		if (!me.deviceOrientation.alpha) return;
-
-		var alpha = me.deviceOrientation.alpha ? THREE.Math.degToRad( me.deviceOrientation.alpha ) + me.alphaOffsetAngle : 0; // Z
-		var beta = me.deviceOrientation.beta ? THREE.Math.degToRad( me.deviceOrientation.beta ) : 0; // X'
-		var gamma = me.deviceOrientation.gamma ? THREE.Math.degToRad( me.deviceOrientation.gamma ) : 0; // Y''
-		var orient = me.screenOrientation ? THREE.Math.degToRad( me.screenOrientation ) : 0; // O
-
-		if (beta < Math.PI/2) return;
-
-		setObjectQuaternion( me.object.quaternion, alpha, beta, gamma, orient );
-		me.alpha = alpha;
-
-	};
-
-	me.updateAlphaOffsetAngle = function( angle ) {
-
-		me.alphaOffsetAngle = angle;
-		me.update();
-
-	};
-
-	me.dispose = function() {
-
-		me.disconnect();
-
-	};
-
-	me.connect();
-
-};
-function GLDomeLib() {
-	var stats, container, camSky, camUser;
-	var camFisheye, sceneFisheye;
-	var renderer, control1, control2;
-
-	var width = window.innerWidth;
-	var height = window.innerHeight;
-	var size = Math.min(width, height);
-
-	var mode = (size < 2000) ? 'user' : 'fisheye';
-	var debug = true;
-
-	var me = {
-		maxDuration: false,
-		on: on
-	}
-
-	window.addEventListener('load', start);
-
-	function start() {
-		stats = new Stats();
-		stats.showPanel(0);
-		document.body.appendChild(stats.dom);
-
-		me.scene = new THREE.Scene();
-		sceneFisheye = new THREE.Scene();
-
-		startTime = Date.now();
-
-		initContainer();
-		initCameras();
-
-		dispatch('init');
-
-		initRenderer();
-
-		drawFrame();
-	}
-
-	function initContainer() {
-		container = document.createElement('div');
-		document.body.appendChild(container);
-	}
-
-	function initCameras() {
-		camUser = new THREE.PerspectiveCamera(80, width/height, 1, 3000);
-		camUser.lookAt(new THREE.Vector3(10, 0, 0));
-		control1 = new THREE.DeviceOrientationControls(camUser);
-		control2 = new THREE.MouseControls(camUser);
-
-		me.scene.add(camUser);
-
-		camSky = new THREE.CubeCamera(1, 3000, debug ? 512 : 2048);
-		camSky.renderTarget.texture.minFilter = THREE.LinearMipMapLinearFilter;
-		camSky.lookAt(new THREE.Vector3(0, 10, 0));
-		me.scene.add(camSky);
-
-		sceneFisheye = new THREE.Scene();
-		camFisheye = new THREE.OrthographicCamera(-width/2, width/2, height/2, -height/2, 1000000, 1001000);
-		camFisheye.position.z = 1000001;
-		camFisheye.lookAt(new THREE.Vector3(0, 0, 0))
-		sceneFisheye.add(camFisheye);
-
-		var material = new THREE.MeshBasicMaterial({envMap:camSky.renderTarget});
-		//var material = new THREE.MeshNormalMaterial({wireframe:true});
-
-		var points = [];
-		var n = 50;
-		var s = size/2;
-		for (var i = 0; i <= n; i++) {
-			var y = (i-0.5)/(n-2);
-			if (y < 0) y = 0;
-			var x = -Math.log(Math.cos(y))/Math.tan(1);
-			points.push(new THREE.Vector3(y*s+1e-10, x*s, 0))
-		}
-
-		var fisheyeReflector = new THREE.LatheGeometry(points, Math.round(n*Math.PI));
-		fisheyeReflector = new THREE.Mesh(fisheyeReflector, material);
-		fisheyeReflector.rotation.x = -Math.PI/2;
-		fisheyeReflector.updateMatrix();
-		
-		sceneFisheye.add(fisheyeReflector);
-	}
-
-	function initRenderer() {
-		renderer = new THREE.WebGLRenderer({antialias:true});
-		renderer.setClearColor(0x000000);
-		renderer.setPixelRatio(window.devicePixelRatio);
-		renderer.setSize(width, height);
-		renderer.sortObjects = false;
-
-		container.appendChild(renderer.domElement);
-	}
-	
-	function render() {
-		switch (mode) {
-			case 'user':
-				renderer.render(me.scene, camUser);
-			break;
-			case 'fisheye':
-				camSky.updateCubeMap(renderer, me.scene);
-				renderer.render(sceneFisheye, camFisheye);
-			break;
-		}
-		
-	}
-
-	function drawFrame() {
-		stats.begin();
-		control1.update();
-		control2.update();
-		dispatch('frame');
-		render();
-		stats.end();
-
-		if (me.maxDuration) {
-			if (Date.now() < startTime+me.maxDuration*1000) requestAnimationFrame(drawFrame);
-		} else {
-			requestAnimationFrame(drawFrame);
-		}
-	}
-
-	var eventMap = {};
-	function on(eventName, cb) {
-		if (!eventMap[eventName]) eventMap[eventName] = [];
-		eventMap[eventName].push(cb);
-	}
-
-	function dispatch(eventName) {
-		var eventList = eventMap[eventName];
-		if (!eventList) return;
-		eventList.forEach(function (cb) {
-			cb.call(me);
-		});
-	}
-
-	return me;
-}
-
-
-
-/**
- * @author dmarcos / http://github.com/dmarcos
- *
- * This controls allow to change the orientation of the camera using the mouse
- */
-
-THREE.MouseControls = function (object) {
-
-	var me = this;
-	var PI_2 = Math.PI / 2;
-
-	var drag = false;
-
-	me.enabled = true;
-
-	var rotation = { x:0, y:0 };
-	var lastPosition = { x:0, y:0 };
-	var lastZoom = 1;
-
-	function onMouseDown (event) {
-		event.preventDefault();
-		drag = true;
-		lastPosition = getPosition(event);
-	}
-
-	function onMouseUp (event) {
-		drag = false;
-	}
-
-	function onMouseMove (event) {
-		if (me.enabled === false) return;
-		if (!drag) return;
-
-		var position = getPosition(event);
-		var movementX = position.x - lastPosition.x;
-		var movementY = position.y - lastPosition.y;
-		lastPosition = position;
-
-		var moveSpeed = 0.02*object.fov/Math.min(window.innerWidth, window.innerHeight);
-
-		rotation.y += movementX * moveSpeed;
-		rotation.x += movementY * moveSpeed;
-	}
-
-	function onGestureChange (event) {
-		event.preventDefault();
-
-		var zoomChange = event.scale/lastZoom;
-		lastZoom = event.scale;
-		object.fov /= zoomChange;
-		if (object.fov <   1) object.fov =   1;
-		if (object.fov > 170) object.fov = 170;
-		object.updateProjectionMatrix();
-	}
-
-	function onGestureStart (event) {
-		event.preventDefault();
-
-		lastZoom = 1;
-	}
-
-	function getPosition (event) {
-		return {
-			x: event.pageX,
-			y: event.pageY
-		}
-	}
-
-	me.update = function() {
-
-		if (me.enabled === false) return;
-
-		object.rotation.x += rotation.x;
-		object.rotation.y += rotation.y;
-		
-		object.rotation.x = Math.max(-PI_2, Math.min(PI_2, object.rotation.x));
-
-		rotation.x = 0;
-		rotation.y = 0;
-
-		return;
-
-	};
-
-	me.dispose = function() {
-
-		document.removeEventListener('mousedown', onMouseDown, false);
-		document.removeEventListener('mouseup',   onMouseUp,   false);
-		document.removeEventListener('mousemove', onMouseMove, false);
-
-	}
-
-	document.addEventListener('mousedown',     onMouseDown, false);
-	document.addEventListener('mouseup',       onMouseUp,   false);
-	document.addEventListener('mousemove',     onMouseMove, false);
-
-	document.addEventListener('touchstart',    onMouseDown, false);
-	document.addEventListener('touchend',      onMouseUp,   false);
-	document.addEventListener('touchmove',     onMouseMove, false);
-
-	document.addEventListener('gesturestart',  onGestureStart,  false);
-	document.addEventListener('gesturechange', onGestureChange, false);
-
-};
-// stats.js - http://github.com/mrdoob/stats.js
-var Stats=function(){function h(a){c.appendChild(a.dom);return a}function k(a){for(var d=0;d<c.children.length;d++)c.children[d].style.display=d===a?"block":"none";l=a}var l=0,c=document.createElement("div");c.style.cssText="position:fixed;top:0;left:0;cursor:pointer;opacity:0.9;z-index:10000";c.addEventListener("click",function(a){a.preventDefault();k(++l%c.children.length)},!1);var g=(performance||Date).now(),e=g,a=0,r=h(new Stats.Panel("FPS","#0ff","#002")),f=h(new Stats.Panel("MS","#0f0","#020"));
-if(self.performance&&self.performance.memory)var t=h(new Stats.Panel("MB","#f08","#201"));k(0);return{REVISION:16,dom:c,addPanel:h,showPanel:k,begin:function(){g=(performance||Date).now()},end:function(){a++;var c=(performance||Date).now();f.update(c-g,200);if(c>e+1E3&&(r.update(1E3*a/(c-e),100),e=c,a=0,t)){var d=performance.memory;t.update(d.usedJSHeapSize/1048576,d.jsHeapSizeLimit/1048576)}return c},update:function(){g=this.end()},domElement:c,setMode:k}};
-Stats.Panel=function(h,k,l){var c=Infinity,g=0,e=Math.round,a=e(window.devicePixelRatio||1),r=80*a,f=48*a,t=3*a,u=2*a,d=3*a,m=15*a,n=74*a,p=30*a,q=document.createElement("canvas");q.width=r;q.height=f;q.style.cssText="width:80px;height:48px";var b=q.getContext("2d");b.font="bold "+9*a+"px Helvetica,Arial,sans-serif";b.textBaseline="top";b.fillStyle=l;b.fillRect(0,0,r,f);b.fillStyle=k;b.fillText(h,t,u);b.fillRect(d,m,n,p);b.fillStyle=l;b.globalAlpha=.9;b.fillRect(d,m,n,p);return{dom:q,update:function(f,
-v){c=Math.min(c,f);g=Math.max(g,f);b.fillStyle=l;b.globalAlpha=1;b.fillRect(0,0,r,m);b.fillStyle=k;b.fillText(e(f)+" "+h+" ("+e(c)+"-"+e(g)+")",t,u);b.drawImage(q,d+a,m,n-a,p,d,m,n-a,p);b.fillRect(d+n-a,m,a,p);b.fillStyle=l;b.globalAlpha=.9;b.fillRect(d+n-a,m,a,e((1-f/v)*p))}}};"object"===typeof module&&(module.exports=Stats);
 // File:src/Three.js
 
 /**
@@ -41867,4 +41504,367 @@ THREE.MorphBlendMesh.prototype.update = function ( delta ) {
 	}
 
 };
+
+/**
+ * @author richt / http://richt.me
+ * @author WestLangley / http://github.com/WestLangley
+ *
+ * W3C Device Orientation control (http://w3c.github.io/deviceorientation/spec-source-orientation.html)
+ */
+
+THREE.DeviceOrientationControls = function( object ) {
+
+	var me = this;
+
+	me.object = object;
+	me.object.rotation.reorder( "YXZ" );
+
+	me.enabled = true;
+
+	me.deviceOrientation = {};
+	me.screenOrientation = 0;
+
+	me.alpha = 0;
+	me.alphaOffsetAngle = 0;
+
+	var onDeviceOrientationChangeEvent = function( event ) {
+		me.deviceOrientation = event;
+
+	};
+
+	var onScreenOrientationChangeEvent = function() {
+
+		me.screenOrientation = window.orientation || 0;
+
+	};
+
+	// The angles alpha, beta and gamma form a set of intrinsic Tait-Bryan angles of type Z-X'-Y''
+
+	var setObjectQuaternion = function() {
+
+		var zee = new THREE.Vector3( 0, 0, 1 );
+
+		var euler = new THREE.Euler();
+
+		var q0 = new THREE.Quaternion();
+
+		var q1 = new THREE.Quaternion( - Math.sqrt( 0.5 ), 0, 0, Math.sqrt( 0.5 ) ); // - PI/2 around the x-axis
+
+		return function( quaternion, alpha, beta, gamma, orient ) {
+
+			euler.set( beta, alpha, - gamma, 'YXZ' ); // 'ZXY' for the device, but 'YXZ' for us
+
+			quaternion.setFromEuler( euler ); // orient the device
+
+			quaternion.multiply( q1 ); // camera looks out the back of the device, not the top
+
+			quaternion.multiply( q0.setFromAxisAngle( zee, - orient ) ); // adjust for screen orientation
+
+		}
+
+	}();
+
+	me.connect = function() {
+
+		onScreenOrientationChangeEvent(); // run once on load
+
+		window.addEventListener( 'orientationchange', onScreenOrientationChangeEvent, false );
+		window.addEventListener( 'deviceorientation', onDeviceOrientationChangeEvent, false );
+
+		me.enabled = true;
+
+	};
+
+	me.disconnect = function() {
+
+		window.removeEventListener( 'orientationchange', onScreenOrientationChangeEvent, false );
+		window.removeEventListener( 'deviceorientation', onDeviceOrientationChangeEvent, false );
+
+		me.enabled = false;
+
+	};
+
+	me.update = function() {
+
+		if ( me.enabled === false ) return;
+		if (!me.deviceOrientation) return;
+		if (!me.deviceOrientation.alpha) return;
+
+		var alpha = me.deviceOrientation.alpha ? THREE.Math.degToRad( me.deviceOrientation.alpha ) + me.alphaOffsetAngle : 0; // Z
+		var beta = me.deviceOrientation.beta ? THREE.Math.degToRad( me.deviceOrientation.beta ) : 0; // X'
+		var gamma = me.deviceOrientation.gamma ? THREE.Math.degToRad( me.deviceOrientation.gamma ) : 0; // Y''
+		var orient = me.screenOrientation ? THREE.Math.degToRad( me.screenOrientation ) : 0; // O
+
+		if (beta < Math.PI/2) return;
+
+		setObjectQuaternion( me.object.quaternion, alpha, beta, gamma, orient );
+		me.alpha = alpha;
+
+	};
+
+	me.updateAlphaOffsetAngle = function( angle ) {
+
+		me.alphaOffsetAngle = angle;
+		me.update();
+
+	};
+
+	me.dispose = function() {
+
+		me.disconnect();
+
+	};
+
+	me.connect();
+
+};
+/**
+ * @author dmarcos / http://github.com/dmarcos
+ *
+ * This controls allow to change the orientation of the camera using the mouse
+ */
+
+THREE.MouseControls = function (object) {
+
+	var me = this;
+	var PI_2 = Math.PI / 2;
+
+	var drag = false;
+
+	me.enabled = true;
+
+	var rotation = { x:0, y:0 };
+	var lastPosition = { x:0, y:0 };
+	var lastZoom = 1;
+
+	function onMouseDown (event) {
+		event.preventDefault();
+		drag = true;
+		lastPosition = getPosition(event);
+	}
+
+	function onMouseUp (event) {
+		drag = false;
+	}
+
+	function onMouseMove (event) {
+		if (me.enabled === false) return;
+		if (!drag) return;
+
+		var position = getPosition(event);
+		var movementX = position.x - lastPosition.x;
+		var movementY = position.y - lastPosition.y;
+		lastPosition = position;
+
+		var moveSpeed = 0.02*object.fov/Math.min(window.innerWidth, window.innerHeight);
+
+		rotation.y += movementX * moveSpeed;
+		rotation.x += movementY * moveSpeed;
+	}
+
+	function onGestureChange (event) {
+		event.preventDefault();
+
+		var zoomChange = event.scale/lastZoom;
+		lastZoom = event.scale;
+		object.fov /= zoomChange;
+		if (object.fov <   1) object.fov =   1;
+		if (object.fov > 170) object.fov = 170;
+		object.updateProjectionMatrix();
+	}
+
+	function onGestureStart (event) {
+		event.preventDefault();
+
+		lastZoom = 1;
+	}
+
+	function getPosition (event) {
+		return {
+			x: event.pageX,
+			y: event.pageY
+		}
+	}
+
+	me.update = function() {
+
+		if (me.enabled === false) return;
+
+		object.rotation.x += rotation.x;
+		object.rotation.y += rotation.y;
+		
+		object.rotation.x = Math.max(-PI_2, Math.min(PI_2, object.rotation.x));
+
+		rotation.x = 0;
+		rotation.y = 0;
+
+		return;
+
+	};
+
+	me.dispose = function() {
+
+		document.removeEventListener('mousedown', onMouseDown, false);
+		document.removeEventListener('mouseup',   onMouseUp,   false);
+		document.removeEventListener('mousemove', onMouseMove, false);
+
+	}
+
+	document.addEventListener('mousedown',     onMouseDown, false);
+	document.addEventListener('mouseup',       onMouseUp,   false);
+	document.addEventListener('mousemove',     onMouseMove, false);
+
+	document.addEventListener('touchstart',    onMouseDown, false);
+	document.addEventListener('touchend',      onMouseUp,   false);
+	document.addEventListener('touchmove',     onMouseMove, false);
+
+	document.addEventListener('gesturestart',  onGestureStart,  false);
+	document.addEventListener('gesturechange', onGestureChange, false);
+
+};
+// stats.js - http://github.com/mrdoob/stats.js
+var Stats=function(){function h(a){c.appendChild(a.dom);return a}function k(a){for(var d=0;d<c.children.length;d++)c.children[d].style.display=d===a?"block":"none";l=a}var l=0,c=document.createElement("div");c.style.cssText="position:fixed;top:0;left:0;cursor:pointer;opacity:0.9;z-index:10000";c.addEventListener("click",function(a){a.preventDefault();k(++l%c.children.length)},!1);var g=(performance||Date).now(),e=g,a=0,r=h(new Stats.Panel("FPS","#0ff","#002")),f=h(new Stats.Panel("MS","#0f0","#020"));
+if(self.performance&&self.performance.memory)var t=h(new Stats.Panel("MB","#f08","#201"));k(0);return{REVISION:16,dom:c,addPanel:h,showPanel:k,begin:function(){g=(performance||Date).now()},end:function(){a++;var c=(performance||Date).now();f.update(c-g,200);if(c>e+1E3&&(r.update(1E3*a/(c-e),100),e=c,a=0,t)){var d=performance.memory;t.update(d.usedJSHeapSize/1048576,d.jsHeapSizeLimit/1048576)}return c},update:function(){g=this.end()},domElement:c,setMode:k}};
+Stats.Panel=function(h,k,l){var c=Infinity,g=0,e=Math.round,a=e(window.devicePixelRatio||1),r=80*a,f=48*a,t=3*a,u=2*a,d=3*a,m=15*a,n=74*a,p=30*a,q=document.createElement("canvas");q.width=r;q.height=f;q.style.cssText="width:80px;height:48px";var b=q.getContext("2d");b.font="bold "+9*a+"px Helvetica,Arial,sans-serif";b.textBaseline="top";b.fillStyle=l;b.fillRect(0,0,r,f);b.fillStyle=k;b.fillText(h,t,u);b.fillRect(d,m,n,p);b.fillStyle=l;b.globalAlpha=.9;b.fillRect(d,m,n,p);return{dom:q,update:function(f,
+v){c=Math.min(c,f);g=Math.max(g,f);b.fillStyle=l;b.globalAlpha=1;b.fillRect(0,0,r,m);b.fillStyle=k;b.fillText(e(f)+" "+h+" ("+e(c)+"-"+e(g)+")",t,u);b.drawImage(q,d+a,m,n-a,p,d,m,n-a,p);b.fillRect(d+n-a,m,a,p);b.fillStyle=l;b.globalAlpha=.9;b.fillRect(d+n-a,m,a,e((1-f/v)*p))}}};"object"===typeof module&&(module.exports=Stats);
+function GLDomeLib() {
+	var stats, container, camSky, camUser;
+	var camFisheye, sceneFisheye;
+	var renderer, control1, control2;
+
+	var width = window.innerWidth;
+	var height = window.innerHeight;
+	var size = Math.min(width, height);
+
+	var mode = (size < 2000) ? 'user' : 'fisheye';
+	var debug = true;
+
+	var me = {
+		maxDuration: false,
+		on: on
+	}
+
+	window.addEventListener('load', start);
+
+	function start() {
+		stats = new Stats();
+		stats.showPanel(0);
+		document.body.appendChild(stats.dom);
+
+		me.scene = new THREE.Scene();
+		sceneFisheye = new THREE.Scene();
+
+		startTime = Date.now();
+
+		initContainer();
+		initCameras();
+
+		dispatch('init');
+
+		initRenderer();
+
+		drawFrame();
+	}
+
+	function initContainer() {
+		container = document.createElement('div');
+		document.body.appendChild(container);
+	}
+
+	function initCameras() {
+		camUser = new THREE.PerspectiveCamera(80, width/height, 1, 3000);
+		camUser.lookAt(new THREE.Vector3(10, 0, 0));
+		control1 = new THREE.DeviceOrientationControls(camUser);
+		control2 = new THREE.MouseControls(camUser);
+
+		me.scene.add(camUser);
+
+		camSky = new THREE.CubeCamera(1, 3000, debug ? 512 : 2048);
+		camSky.renderTarget.texture.minFilter = THREE.LinearMipMapLinearFilter;
+		camSky.lookAt(new THREE.Vector3(0, 10, 0));
+		me.scene.add(camSky);
+
+		sceneFisheye = new THREE.Scene();
+		camFisheye = new THREE.OrthographicCamera(-width/2, width/2, height/2, -height/2, 1000000, 1001000);
+		camFisheye.position.z = 1000001;
+		camFisheye.lookAt(new THREE.Vector3(0, 0, 0))
+		sceneFisheye.add(camFisheye);
+
+		var material = new THREE.MeshBasicMaterial({envMap:camSky.renderTarget});
+		//var material = new THREE.MeshNormalMaterial({wireframe:true});
+
+		var points = [];
+		var n = 50;
+		var s = size/2;
+		for (var i = 0; i <= n; i++) {
+			var y = (i-0.5)/(n-2);
+			if (y < 0) y = 0;
+			var x = -Math.log(Math.cos(y))/Math.tan(1);
+			points.push(new THREE.Vector3(y*s+1e-10, x*s, 0))
+		}
+
+		var fisheyeReflector = new THREE.LatheGeometry(points, Math.round(n*Math.PI));
+		fisheyeReflector = new THREE.Mesh(fisheyeReflector, material);
+		fisheyeReflector.rotation.x = -Math.PI/2;
+		fisheyeReflector.updateMatrix();
+		
+		sceneFisheye.add(fisheyeReflector);
+	}
+
+	function initRenderer() {
+		renderer = new THREE.WebGLRenderer({antialias:true});
+		renderer.setClearColor(0x000000);
+		renderer.setPixelRatio(window.devicePixelRatio);
+		renderer.setSize(width, height);
+		renderer.sortObjects = false;
+
+		container.appendChild(renderer.domElement);
+	}
+	
+	function render() {
+		switch (mode) {
+			case 'user':
+				renderer.render(me.scene, camUser);
+			break;
+			case 'fisheye':
+				camSky.updateCubeMap(renderer, me.scene);
+				renderer.render(sceneFisheye, camFisheye);
+			break;
+		}
+		
+	}
+
+	function drawFrame() {
+		stats.begin();
+		control1.update();
+		control2.update();
+		dispatch('frame');
+		render();
+		stats.end();
+
+		if (me.maxDuration) {
+			if (Date.now() < startTime+me.maxDuration*1000) requestAnimationFrame(drawFrame);
+		} else {
+			requestAnimationFrame(drawFrame);
+		}
+	}
+
+	var eventMap = {};
+	function on(eventName, cb) {
+		if (!eventMap[eventName]) eventMap[eventName] = [];
+		eventMap[eventName].push(cb);
+	}
+
+	function dispatch(eventName) {
+		var eventList = eventMap[eventName];
+		if (!eventList) return;
+		eventList.forEach(function (cb) {
+			cb.call(me);
+		});
+	}
+
+	return me;
+}
+
+
 
