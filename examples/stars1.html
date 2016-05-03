@@ -18,9 +18,7 @@
 		<script type="text/javascript">
 			var dome = new GLDomeLib();
 
-			var textureLoader = new THREE.TextureLoader();
-			var sprite = textureLoader.load('star.png');
-			var group = new THREE.Group();
+			var group = false;
 
 			dome.maxDuration = 60;
 
@@ -28,32 +26,29 @@
 				var scene = this.scene;
 
 				var scale = 100;
+
+				// Here comes the sun ... düm, düm, düm, düm
+				group = new THREE.IcosahedronGeometry(2, 0);
+				// And I say it's all right
+
 				var material = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
 				stars.forEach(function (star, index) {
-
 					var size = Math.sqrt(star.lum)*2;
 					var details = Math.floor(Math.log2(size/star.dist)/2+2);
 					if (details < 0) details = 0;
 					var geometry = new THREE.IcosahedronGeometry(size, details);
-					var circle = new THREE.Mesh(geometry, material);
+					var mesh = new THREE.Mesh(geometry);
+					mesh.position.x = star.x*scale;
+					mesh.position.y = star.y*scale;
+					mesh.position.z = star.z*scale;
+					mesh.updateMatrix();
 
-					circle.position.x = star.x*scale;
-					circle.position.y = star.y*scale;
-					circle.position.z = star.z*scale;
-
-					group.add(circle);
+					group.merge(mesh.geometry, mesh.matrix);
 				})
 
-				// Here comes the sun ... düm, düm, düm, düm
-				var geometry = new THREE.IcosahedronGeometry(2, 0);
-				var circle = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x0088ff }));
-
-				circle.position.x = 0;
-				circle.position.y = 0;
-				circle.position.z = 0;
-				group.add(circle);
-				// And I say it's all right
+				
+				group = new THREE.Mesh(group, new THREE.MeshBasicMaterial({ color: 0xffffff }));
 
 				scene.add(group);
 			})
