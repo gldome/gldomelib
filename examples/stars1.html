@@ -14,7 +14,7 @@
 			}
 		</style>
 		<script type="text/javascript" src="https://gldome.github.io/gldomelib/release/gldomelib_latest.min.js"></script>
-		<script type="text/javascript" src="stars.js"></script>
+		<script type="text/javascript" src="starlist2.js"></script>
 		<script type="text/javascript">
 			var dome = new GLDomeLib();
 
@@ -22,41 +22,48 @@
 			var sprite = textureLoader.load('star.png');
 			var group = new THREE.Group();
 
-			dome.maxDuration = 30;
+			dome.maxDuration = 60;
 
 			dome.on('init', function () {
 				var scene = this.scene;
 
 				var scale = 100;
+				var material = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-				stars.forEach(function (star) {
-					var vertex = new THREE.Vector3();
-					vertex.x = star.x*scale;
-					vertex.y = star.y*scale;
-					vertex.z = star.z*scale;
-					
-					var geometry = new THREE.Geometry();
-					geometry.vertices.push(vertex);
+				stars.forEach(function (star, index) {
 
-					var material = new THREE.PointsMaterial({
-						size:Math.sqrt(star.lum)*6,
-						map:sprite,
-						blending:THREE.AdditiveBlending,
-						depthTest:false,
-						transparent:true
-					});
-					particle = new THREE.Points(geometry, material);
-					group.add(particle);
+					var size = Math.sqrt(star.lum)*2;
+					var details = Math.floor(Math.log2(size/star.dist)/2+2);
+					if (details < 0) details = 0;
+					var geometry = new THREE.IcosahedronGeometry(size, details);
+					var circle = new THREE.Mesh(geometry, material);
+
+					circle.position.x = star.x*scale;
+					circle.position.y = star.y*scale;
+					circle.position.z = star.z*scale;
+
+					group.add(circle);
 				})
 
+				// Here comes the sun ... düm, düm, düm, düm
+				var geometry = new THREE.IcosahedronGeometry(2, 0);
+				var circle = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x0088ff }));
+
+				circle.position.x = 0;
+				circle.position.y = 0;
+				circle.position.z = 0;
+				group.add(circle);
+				// And I say it's all right
+
 				scene.add(group);
-				
 			})
 
 			dome.on('frame', function () {
 				var time = Date.now()/1000;
+				var a = time*0.03;
 
-				group.rotation.z = time*0.03;
+				group.position.y = 1000;
+				group.rotation.z = a;
 				group.updateMatrix();
 			})
 		</script>
