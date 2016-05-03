@@ -6,6 +6,7 @@ function GLDomeLib() {
 	var width = window.innerWidth;
 	var height = window.innerHeight;
 	var size = Math.min(width, height);
+	var maxSize = 1800;
 
 	var me = {
 		maxDuration: false,
@@ -91,7 +92,7 @@ function GLDomeLib() {
 	}
 	
 	function render() {
-		if (size < 1500) {
+		if (size < maxSize) {
 			// user perspective
 			renderer.render(me.scene, camUser);
 		} else {
@@ -110,7 +111,7 @@ function GLDomeLib() {
 		render();
 		stats.end();
 
-		if (me.maxDuration) {
+		if (me.maxDuration && (size < maxSize)) {
 			if (Date.now() < startTime+me.maxDuration*1000) requestAnimationFrame(drawFrame);
 		} else {
 			requestAnimationFrame(drawFrame);
