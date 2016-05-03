@@ -41,14 +41,14 @@ function GLDomeLib() {
 	}
 
 	function initCameras() {
-		camUser = new THREE.PerspectiveCamera(80, width/height, 1, 3000);
+		camUser = new THREE.PerspectiveCamera(80, width/height, 1, 1000000);
 		camUser.lookAt(new THREE.Vector3(10, 0, 0));
 		control1 = new THREE.DeviceOrientationControls(camUser);
 		control2 = new THREE.MouseControls(camUser);
 
 		me.scene.add(camUser);
 
-		camSky = new THREE.CubeCamera(1, 3000, 2048);
+		camSky = new THREE.CubeCamera(1, 1000000, 2048);
 		camSky.renderTarget.texture.minFilter = THREE.LinearMipMapLinearFilter;
 		camSky.lookAt(new THREE.Vector3(0, 10, 0));
 		me.scene.add(camSky);
