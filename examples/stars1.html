@@ -49,6 +49,7 @@
 
 				
 				group = new THREE.Mesh(group, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+				group.frustumCulled = false;
 
 				scene.add(group);
 			})
